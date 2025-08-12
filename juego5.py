@@ -183,6 +183,9 @@ while running:
         print("Error leyendo la cámara")
         break
 
+    # ---- LÍNEA NUEVA PARA MODO ESPEJO ----
+    frame = cv2.flip(frame, 1)
+
     # Máscara de movimiento (abrir + dilatar, con learningRate bajo para fondo estable)
     if OCLUSION_ACTIVA:
         fgmask = fgbg.apply(frame, learningRate=BG_LEARNING_RATE)
@@ -250,17 +253,14 @@ while running:
             despawned_this_frame = True
 
     # 2) Puntos por tapado rápido:
-    #    Si el marcador NO está visible ahora y hubo oclusión en su polígono "reciente"
     for cid, data in list(castores.items()):
         if cid not in current_ids:
             last_occ = data.get("last_occluded_ms", -10**9)
             last_seen = data.get("last_seen_ms", -10**9)
-            # condición: que la desaparición sea cercana a una oclusión (tapado real)
             if (t_ms - last_occ) <= OCC_WINDOW_MS and (t_ms - last_seen) <= OCC_WINDOW_MS:
                 ratio_now = motion_ratio_in_polygon(fgmask, data.get("poly", None)) if OCLUSION_ACTIVA else 0.0
                 if ratio_now >= (MOTION_RATIO_HIT * 0.7) or (t_ms - last_occ) <= 200:
-                    puntos += 1  # golpe válido
-            # En cualquier caso, si no se ve, elimínalo para evitar "fantasma"
+                    puntos += 1
             del castores[cid]
             despawned_this_frame = True
 
@@ -270,7 +270,6 @@ while running:
         crear_nuevo = False
 
     if crear_nuevo:
-        # tomar candidatos entre los marcadores definidos que estén estables visibles
         candidates = [m for m in marcadores_info.keys() if m in visible_stable]
         if candidates:
             mid = random.choice(candidates)
@@ -290,31 +289,28 @@ while running:
     ventana.fill((0,0,0))
     ventana.blit(pantalla_from_frame(frame), (0,0))
 
-    # Dibujar castor (a lo sumo 1)
+    # Dibujar castor
     for mid, info in castores.items():
         x, y = info["pos"]
         surf = castor_verde if info["color"] == "verde" else castor_morado
         ventana.blit(surf, (x - surf.get_width()//2, y - surf.get_height()//2))
 
-    # HUD: puntos y vidas (vidas con corazones en la línea inferior)
     ventana.blit(fuente.render(f"Puntos: {puntos}", True, (0,255,0)), (20,20))
     dibujar_vidas(ventana, vidas)
 
-    # Cronómetro arriba, con color dinámico (blanco >2s, naranja 2-1s, rojo <=1s)
     if castores:
         cid, data = next(iter(castores.items()))
         remain_ms = max(0, TIEMPO_CASTOR_MS - (t_ms - data["spawn_ms"]))
         remain_sec = (remain_ms + 999) // 1000
         if remain_sec <= 1:
-            timer_color = (255, 60, 60)      # rojo
+            timer_color = (255, 60, 60)
         elif remain_sec <= 2:
-            timer_color = (255, 165, 0)      # naranja
+            timer_color = (255, 165, 0)
         else:
-            timer_color = (255, 255, 255)    # blanco
+            timer_color = (255, 255, 255)
         cron = fuente_timer.render(f"{remain_sec}s", True, timer_color)
         ventana.blit(cron, (ANCHO//2 - cron.get_width()//2, 8))
 
-    # Game over
     if vidas <= 0:
         go = fuente.render("GAME OVER", True, (255,0,0))
         ventana.blit(go, (ANCHO//2 - go.get_width()//2, ALTO//2 - go.get_height()//2))
@@ -324,14 +320,12 @@ while running:
 
     pygame.display.flip()
 
-    # Eventos
     for ev in pygame.event.get():
         if ev.type == pygame.QUIT:
             running = False
 
     clock.tick(30)
 
-# limpiar
 cap.release()
 pygame.quit()
 cv2.destroyAllWindows()
