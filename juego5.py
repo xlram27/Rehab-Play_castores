@@ -42,13 +42,36 @@ fuente = pygame.font.Font(None, 48)
 fuente_timer = pygame.font.Font(None, 64)
 clock = pygame.time.Clock()
 
+# --- RUTAS PORTABLES ---
 def resource_path(rel):
-    # Soporta ejecución normal y empaquetado (PyInstaller)
     if hasattr(sys, "_MEIPASS"):
         base = sys._MEIPASS
     else:
         base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, rel)
+
+# Audio (después de init)
+pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+pygame.mixer.music.set_volume(1.0)
+
+# Ruta del MP3: raíz o carpeta ARCHIVOS
+path_sonido = resource_path(os.path.join("ARCHIVOS", "path_sonido.mp3"))  # o "path_sonido.mp3"
+if not os.path.exists(path_sonido):
+    print("[MISS] No existe el MP3:", path_sonido)
+else:
+    print("[OK] MP3 listo:", path_sonido)
+
+def play_vida_perdida():
+    if not os.path.exists(path_sonido):
+        return
+    try:
+        # Si ya hay algo sonando, córtalo para que se escuche completo
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
+        pygame.mixer.music.load(path_sonido)
+        pygame.mixer.music.play()  # no bloquea
+    except Exception as e:
+        print("[ERR] Reproduciendo MP3:", e)
 
 # Cargar y escalar CORAZÓN (PNG con transparencia)
 heart_candidates = [
@@ -319,10 +342,11 @@ while running:
 
     # 1) Vida por tiempo
     for cid, data in list(castores.items()):
-        if (t_ms - data["spawn_ms"]) >= TIEMPO_CASTOR_MS:
-            vidas -= 1
-            del castores[cid]
-            despawned_this_frame = True
+     if (t_ms - data["spawn_ms"]) >= TIEMPO_CASTOR_MS:
+        vidas -= 1
+        play_vida_perdida()   # <<< AQUI
+        del castores[cid]
+        despawned_this_frame = True
 
     # 2) Puntos por tapado: desaparición + oclusión reciente
     for cid, data in list(castores.items()):
