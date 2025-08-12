@@ -69,17 +69,17 @@ clock = pygame.time.Clock()
 start_time_ms = pygame.time.get_ticks()   # cronómetro de la partida
 
 # Audio (después de init)
-pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+pygame.mixer.init(frequency=44100, size=-16, channels=1, buffer=512)
 pygame.mixer.music.set_volume(1.0)
 
-# Ruta del MP3: raíz o carpeta ARCHIVOS
-path_sonido = resource_path(os.path.join("ARCHIVOS", "path_sonido.mp3"))  # o "path_sonido.mp3"
+# Ruta del MP3: raíz o carpeta
+path_sonido = resource_path(os.path.join("path_sonido.mp3"))  # o "path_sonido.mp3"
 if not os.path.exists(path_sonido):
     print("[MISS] No existe el MP3:", path_sonido)
 else:
     print("[OK] MP3 listo:", path_sonido)
 
-def play_vida_perdida():
+def play_puntos_por_tapado():
     if not os.path.exists(path_sonido):
         return
     try:
@@ -87,6 +87,30 @@ def play_vida_perdida():
         if pygame.mixer.music.get_busy():
             pygame.mixer.music.stop()
         pygame.mixer.music.load(path_sonido)
+        pygame.mixer.music.play()  # no bloquea
+        print("estoyaqui")
+    except Exception as e:
+        print("[ERR] Reproduciendo MP3:", e)
+
+# Audio (después de init)
+pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+pygame.mixer.music.set_volume(1.0)
+
+# Ruta del MP3: raíz o carpeta
+deadsound = resource_path(os.path.join("deadsound.mp3"))  
+if not os.path.exists(deadsound):
+    print("[MISS] No existe el MP3:", deadsound)
+else:
+    print("[OK] MP3 listo:", deadsound)
+
+def play_vida_perdida():
+    if not os.path.exists(deadsound):
+        return
+    try:
+        # Si ya hay algo sonando, córtalo para que se escuche completo
+        if pygame.mixer.music.get_busy():
+            pygame.mixer.music.stop()
+        pygame.mixer.music.load(deadsound)
         pygame.mixer.music.play()  # no bloquea
     except Exception as e:
         print("[ERR] Reproduciendo MP3:", e)
@@ -414,7 +438,6 @@ while running:
     for cid, data in list(castores.items()):
      if (t_ms - data["spawn_ms"]) >= TIEMPO_CASTOR_MS:
         vidas -= 1
-        play_vida_perdida()   # <<< AQUI
         del castores[cid]
         despawned_this_frame = True
 
@@ -428,6 +451,8 @@ while running:
                 ratio_now = motion_ratio_in_polygon(fgmask, data.get("poly_orig", None)) if OCLUSION_ACTIVA else 0.0
                 if ratio_now >= (MOTION_RATIO_HIT * 0.7) or (t_ms - last_occ) <= 200:
                     puntos += 1
+                    play_puntos_por_tapado()  # <<< AQUI
+
             del castores[cid]
             despawned_this_frame = True
 
@@ -455,6 +480,7 @@ while running:
     # --- 7) DIBUJO (usa frame_display) ---
     ventana.fill((0,0,0))
     ventana.blit(pantalla_from_frame(frame_display), (0,0))
+    play_vida_perdida()   # <<< AQUI
 
     # Castor(es) sobre el video
     for mid, info in castores.items():
