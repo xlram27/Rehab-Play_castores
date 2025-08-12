@@ -52,8 +52,9 @@ def resource_path(rel):
 
 # Cargar y escalar CORAZÓN (PNG con transparencia)
 heart_candidates = [
-    "corazon.png",
-    os.path.join("assets", "corazon.png"),
+    "corazon.png",                          # raíz
+    os.path.join("ARCHIVOS", "corazon.png"),# tu carpeta actual
+    os.path.join("assets", "corazon.png"),  # por si luego cambias a assets
 ]
 corazon_img = None
 for candidate in heart_candidates:
@@ -73,7 +74,7 @@ for candidate in heart_candidates:
 if corazon_img is None:
     print("No se encontró corazon.png. Usaré texto como fallback.")
 
-        # Dibujar empezando en la izquierda, en la línea inferior (10 píxeles desde abajo)
+# Dibujar corazones de vidas (abajo-izquierda)
 def dibujar_vidas(surface, vidas, y_offset=10, x_offset=10, spacing=10):
     if corazon_img is not None:
         h = corazon_img.get_height()
@@ -83,7 +84,6 @@ def dibujar_vidas(surface, vidas, y_offset=10, x_offset=10, spacing=10):
             surface.blit(corazon_img, (x, y))
             x += corazon_img.get_width() + spacing
     else:
-        # Fallback: texto
         txt = fuente.render(f"Vidas: {vidas}", True, (255, 0, 0))
         surface.blit(txt, (20, 70))
 
@@ -91,8 +91,8 @@ def dibujar_vidas(surface, vidas, y_offset=10, x_offset=10, spacing=10):
 # --- Sprites con imágenes reales de castores ---
 try:
     # Cargar y convertir con canal alfa (transparencia)
-    castor_verde = pygame.image.load("castor_verde.png").convert_alpha()
-    castor_morado = pygame.image.load("castor_morado.png").convert_alpha()
+    castor_verde = pygame.image.load(resource_path("ARCHIVOS/castor_verde.png")).convert_alpha()
+    castor_morado = pygame.image.load(resource_path("ARCHIVOS/castor_morado.png")).convert_alpha()
 
     porcentaje_castor = 0.35  # 35% del ancho de la pantalla
     tamaño_castor = int(ANCHO * porcentaje_castor)
