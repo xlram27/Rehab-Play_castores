@@ -128,27 +128,11 @@ def dibujar_vidas(surface, vidas, y_offset=10, x_offset=10, spacing=10):
         txt = fuente.render(f"Vidas: {vidas}", True, (255, 0, 0))
         surface.blit(txt, (20, 70))
 
-
-# --- Sprites con imágenes reales de castores ---
-try:
-    # Cargar y convertir con canal alfa (transparencia)
-    castor_verde = pygame.image.load(resource_path("ARCHIVOS/castor_verde.png")).convert_alpha()
-    castor_morado = pygame.image.load(resource_path("ARCHIVOS/castor_morado.png")).convert_alpha()
-
-    porcentaje_castor = 0.35  # 35% del ancho de la pantalla
-    tamaño_castor = int(ANCHO * porcentaje_castor)
-
-    castor_verde = pygame.transform.smoothscale(castor_verde, (tamaño_castor, tamaño_castor))
-    castor_morado = pygame.transform.smoothscale(castor_morado, (tamaño_castor, tamaño_castor))
-
-except pygame.error as e:
-    print(f"Error cargando imágenes: {e}")
-    # Si hay error, usar óvalos como fallback
-    castor_verde = pygame.Surface((120, 120), pygame.SRCALPHA)
-    pygame.draw.ellipse(castor_verde, (30, 200, 50), castor_verde.get_rect())
-
-    castor_morado = pygame.Surface((120, 120), pygame.SRCALPHA)
-    pygame.draw.ellipse(castor_morado, (150, 50, 150), castor_morado.get_rect())
+# Sprites simples para castores (puedes reemplazar con imágenes si quieres)
+castor_verde = pygame.Surface((120, 120), pygame.SRCALPHA)
+pygame.draw.ellipse(castor_verde, (30,200,50), castor_verde.get_rect())
+castor_morado = pygame.Surface((120, 120), pygame.SRCALPHA)
+pygame.draw.ellipse(castor_morado, (150,50,150), castor_morado.get_rect())
 
 # ------------------------
 # OPENCV / ARUCO
