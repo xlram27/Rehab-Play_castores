@@ -50,7 +50,12 @@ pygame.draw.ellipse(castor_morado, (150,50,150), castor_morado.get_rect())
 # ------------------------
 cap = cv2.VideoCapture(0)
 if not cap.isOpened():
-    raise RuntimeError("No se pudo abrir la webcam.")
+    raise RuntimeError("No se pudo abrir la webcam. Revisa dispositivo/camara.")
+
+# Fuerza 1280x720 @30fps (mejora detalle para ArUco)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap.set(cv2.CAP_PROP_FPS,          30)
 
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 # Crear parámetros (compatibilidad con versiones)
@@ -80,19 +85,23 @@ try:
 except Exception:
     detector = None
     use_detector = False
-
+    
+USE_RAW_DETECT = True
 def detectar_markers(frame_bgr):
-    # Pre-proceso suave para estabilidad
-    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (3,3), 0)
-    # Contraste local uniforme
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray = clahe.apply(gray)
-    if use_detector:
+   #"""Detecta marcadores ArUco sobre el frame ORIGINAL (sin flip)."""
+ if USE_RAW_DETECT:
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+ else:
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (3,3), 0)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+
+ if use_detector:
         corners, ids, _ = detector.detectMarkers(gray)
-    else:
+ else:
         corners, ids, _ = cv2.aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
-    return corners, ids
+ return corners, ids
 
 def pantalla_from_frame(frame):
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
