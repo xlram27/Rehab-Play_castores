@@ -42,53 +42,90 @@ fuente = pygame.font.Font(None, 48)
 fuente_timer = pygame.font.Font(None, 64)
 clock = pygame.time.Clock()
 
-# Cargar y escalar CORAZON UNA SOLA VEZ (usar PNG con transparencia)
-heart_path = "corazon.png"
-corazon_img = None
-if os.path.exists(heart_path):
-    try:
-        corazon_img = pygame.image.load(heart_path).convert_alpha()
-        # tamaño proporcional a la pantalla (aprox 3.5% del ancho)
-        heart_size = max(16, int(ANCHO * 0.035))
-        corazon_img = pygame.transform.smoothscale(corazon_img, (heart_size, heart_size))
-    except Exception as e:
-        print("Error cargando corazon.png:", e)
-        corazon_img = None
-else:
-    print("No se encontró corazon.png en la carpeta. Usaré texto como fallback.")
-
-def dibujar_vidas(surface, vidas):
-    """Dibuja las vidas con corazones en la línea inferior. Si no hay imagen, dibuja texto."""
-    if corazon_img is not None:
-        spacing = 10
-        h = corazon_img.get_height()
-        # Dibujar empezando en la izquierda, en la línea inferior (10 píxeles desde abajo)
-        y = ALTO - h - 10
-        x0 = 10
-        for i in range(max(0, vidas)):
-            x = x0 + i * (corazon_img.get_width() + spacing)
-            surface.blit(corazon_img, (x, y))
+def resource_path(rel):
+    # Soporta ejecución normal y empaquetado (PyInstaller)
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
     else:
-        # fallback: texto arriba a la derecha
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, rel)
+
+# Cargar y escalar CORAZÓN (PNG con transparencia)
+heart_candidates = [
+    "corazon.png",
+    os.path.join("assets", "corazon.png"),
+]
+corazon_img = None
+for candidate in heart_candidates:
+    path = resource_path(candidate)
+    if os.path.exists(path):
+        try:
+            img = pygame.image.load(path).convert_alpha()
+            heart_size = max(16, int(ANCHO * 0.035))   # ~3.5% del ancho
+            corazon_img = pygame.transform.smoothscale(img, (heart_size, heart_size))
+            print(f"[OK] Cargado corazón desde: {path} ({heart_size}px)")
+            break
+        except Exception as e:
+            print(f"[ERR] No pude cargar {path}: {e}")
+    else:
+        print(f"[MISS] No existe: {path}")
+
+if corazon_img is None:
+    print("No se encontró corazon.png. Usaré texto como fallback.")
+
+        # Dibujar empezando en la izquierda, en la línea inferior (10 píxeles desde abajo)
+def dibujar_vidas(surface, vidas, y_offset=10, x_offset=10, spacing=10):
+    if corazon_img is not None:
+        h = corazon_img.get_height()
+        y = ALTO - h - y_offset
+        x = x_offset
+        for _ in range(max(0, vidas)):
+            surface.blit(corazon_img, (x, y))
+            x += corazon_img.get_width() + spacing
+    else:
+        # Fallback: texto
         txt = fuente.render(f"Vidas: {vidas}", True, (255, 0, 0))
         surface.blit(txt, (20, 70))
 
-# Sprites simples para castores (puedes reemplazar con imágenes si quieres)
-castor_verde = pygame.Surface((120, 120), pygame.SRCALPHA)
-pygame.draw.ellipse(castor_verde, (30,200,50), castor_verde.get_rect())
-castor_morado = pygame.Surface((120, 120), pygame.SRCALPHA)
-pygame.draw.ellipse(castor_morado, (150,50,150), castor_morado.get_rect())
+
+# --- Sprites con imágenes reales de castores ---
+try:
+    # Cargar y convertir con canal alfa (transparencia)
+    castor_verde = pygame.image.load("castor_verde.png").convert_alpha()
+    castor_morado = pygame.image.load("castor_morado.png").convert_alpha()
+
+    porcentaje_castor = 0.35  # 35% del ancho de la pantalla
+    tamaño_castor = int(ANCHO * porcentaje_castor)
+
+    castor_verde = pygame.transform.smoothscale(castor_verde, (tamaño_castor, tamaño_castor))
+    castor_morado = pygame.transform.smoothscale(castor_morado, (tamaño_castor, tamaño_castor))
+
+except pygame.error as e:
+    print(f"Error cargando imágenes: {e}")
+    # Si hay error, usar óvalos como fallback
+    castor_verde = pygame.Surface((120, 120), pygame.SRCALPHA)
+    pygame.draw.ellipse(castor_verde, (30, 200, 50), castor_verde.get_rect())
+
+    castor_morado = pygame.Surface((120, 120), pygame.SRCALPHA)
+    pygame.draw.ellipse(castor_morado, (150, 50, 150), castor_morado.get_rect())
 
 # ------------------------
 # OPENCV / ARUCO
 # ------------------------
 cap = cv2.VideoCapture(0)
 if not cap.isOpened():
+    # Fuerza 1280x720 @30fps (mejor detalle para ArUco)
+ cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
+ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+ cap.set(cv2.CAP_PROP_FPS,          30)
+
+if not cap.isOpened():
     raise RuntimeError("No se pudo abrir la webcam. Revisa dispositivo/camara.")
 
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 try:
     aruco_params = cv2.aruco.DetectorParameters()
+    
 except Exception:
     try:
         aruco_params = cv2.aruco.DetectorParameters_create()
@@ -106,6 +143,19 @@ aruco_params.minMarkerPerimeterRate   = 0.03
 aruco_params.maxMarkerPerimeterRate   = 4.0
 aruco_params.minCornerDistanceRate    = 0.02
 
+# PARCHE 2 - parámetros más permisivos
+try:
+    aruco_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+except Exception:
+    pass
+
+aruco_params.minMarkerPerimeterRate   = 0.02   # antes 0.03
+aruco_params.maxMarkerPerimeterRate   = 4.5
+aruco_params.adaptiveThreshWinSizeMin = 5
+aruco_params.adaptiveThreshWinSizeMax = 35
+aruco_params.adaptiveThreshConstant   = 7
+aruco_params.minCornerDistanceRate    = 0.02
+
 use_detector = False
 try:
     detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
@@ -114,12 +164,20 @@ except Exception:
     detector = None
     use_detector = False
 
+USE_RAW_DETECT = True
+
 def detectar_markers(frame_bgr):
-    """Detecta marcadores ArUco (compatibilidad APIs) con preprocesado."""
-    gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (3,3), 0)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray = clahe.apply(gray)
+    """Detecta marcadores ArUco sobre el frame ORIGINAL (sin flip).
+       Si USE_RAW_DETECT=True, evita blur/CLAHE para no matar bordes."""
+    if USE_RAW_DETECT:
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (3,3), 0)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+
+    # Compatibilidad con ArucoDetector (OpenCV 4.7+) o detectMarkers clásico
     if use_detector:
         corners, ids, _ = detector.detectMarkers(gray)
     else:
@@ -174,7 +232,8 @@ vis_count = {}         # id -> frames consecutivos visible
 polys_by_id = {}       # id -> polígono 4x2 (coords frame)
 
 # ------------------------
-# BUCLE PRINCIPAL
+# ------------------------
+# BUCLE PRINCIPAL (REEMPLAZAR TODO ESTE BLOQUE)
 # ------------------------
 running = True
 while running:
@@ -183,10 +242,18 @@ while running:
         print("Error leyendo la cámara")
         break
 
-    # ---- LÍNEA NUEVA PARA MODO ESPEJO ----
-    frame = cv2.flip(frame, 1)
+    H, W = frame.shape[:2]
 
-    # Máscara de movimiento (abrir + dilatar, con learningRate bajo para fondo estable)
+    # --- 1) DETECCIÓN en el frame ORIGINAL (sin flip) ---
+    corners, ids = detectar_markers(frame)
+
+    # DEBUG opcional: ver marcadores detectados
+    # if ids is not None and len(ids) > 0:
+    #    cv2.aruco.drawDetectedMarkers(frame, corners, ids)
+    #else:
+    #    cv2.putText(frame, "No ArUco", (12,28), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 2, cv2.LINE_AA)
+
+    # --- 2) MÁSCARA DE MOVIMIENTO en el frame ORIGINAL (misma referencia que poly_orig) ---
     if OCLUSION_ACTIVA:
         fgmask = fgbg.apply(frame, learningRate=BG_LEARNING_RATE)
         fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
@@ -194,54 +261,59 @@ while running:
     else:
         fgmask = None
 
-    # --- Detección ArUco ---
-    corners, ids = detectar_markers(frame)
+    # --- 3) FRAME PARA MOSTRAR (modo espejo) ---
+    frame_display = cv2.flip(frame, 1)
 
+    # --- 4) Construir mapas de polígonos y posiciones ---
     current_ids = set()
-    polys_by_id.clear()
+    polys_orig = {}   # polígono en coords del frame ORIGINAL (para oclusión)
+    polys_disp = {}   # polígono reflejado para DISPLAY (x' = W - x)
+    positions_by_id = {}  # centro reflejado -> coords de la ventana pygame
 
     if ids is not None and len(ids) > 0:
         ids_flat = ids.flatten().astype(int)
         for i, mid in enumerate(ids_flat):
             current_ids.add(mid)
-            vis_count[mid] = vis_count.get(mid, 0) + 1
-            c = np.array(corners[i]).reshape((-1, 2)).astype(np.float32)  # 4x2
-            polys_by_id[mid] = c
+            # polígono original (4x2) en coords del frame original
+            poly_o = np.array(corners[i]).reshape((-1, 2)).astype(np.float32)
+            polys_orig[mid] = poly_o
 
-        # reset de los no vistos este frame
-        for k in list(vis_count.keys()):
-            if k not in current_ids:
-                vis_count[k] = 0
-    else:
-        for k in list(vis_count.keys()):
+            # polígono reflejado para la imagen mostrada
+            poly_d = poly_o.copy()
+            poly_d[:, 0] = W - poly_d[:, 0]
+            polys_disp[mid] = poly_d
+
+            # centro reflejado -> posición en ventana
+            cx = int(poly_d[:, 0].mean())
+            cy = int(poly_d[:, 1].mean())
+            sx = int(cx * (ANCHO / W))
+            sy = int(cy * (ALTO / H))
+            positions_by_id[mid] = (sx, sy)
+
+    # --- 5) Visibilidad estable para spawn (mantén tu lógica) ---
+    for k in list(vis_count.keys()):
+        if k not in current_ids:
             vis_count[k] = 0
-
-    # Posición en pantalla (centro del polígono reescalado)
-    positions_by_id = {}
-    for mid, poly in polys_by_id.items():
-        cx = int(poly[:,0].mean())
-        cy = int(poly[:,1].mean())
-        sx = int(cx * (ANCHO / frame.shape[1]))
-        sy = int(cy * (ALTO  / frame.shape[0]))
-        positions_by_id[mid] = (sx, sy)
-
-    # Estables para spawn
+    for k in current_ids:
+        vis_count[k] = vis_count.get(k, 0) + 1
     visible_stable = {m for m, cnt in vis_count.items() if cnt >= VIS_CONSEC_REQ}
 
-    # --- TIEMPO ---
+    # --- 6) LÓGICA DE JUEGO ---
     t_ms = pygame.time.get_ticks()
     despawned_this_frame = False
 
     # Actualizar estado del castor activo
     for mid, data in list(castores.items()):
-        # actualizar pos y polígono si está visible
+        # actualizar pos y polígonos
         if mid in positions_by_id:
-            data["pos"] = positions_by_id[mid]
+            data["pos"] = positions_by_id[mid]                 # para dibujar sobre DISPLAY
             data["last_seen_ms"] = t_ms
-            data["poly"] = polys_by_id.get(mid, data.get("poly", None))
-            # registrar oclusión (tapado parcial) mientras está visible
-            if OCLUSION_ACTIVA and data["poly"] is not None:
-                ratio = motion_ratio_in_polygon(fgmask, data["poly"])
+            data["poly"] = polys_disp.get(mid, data.get("poly", None))   # opcional si lo usas en UI
+            data["poly_orig"] = polys_orig.get(mid, data.get("poly_orig", None))  # para oclusión
+
+            # Registrar oclusión SOLO con polígono del frame ORIGINAL
+            if OCLUSION_ACTIVA and (data["poly_orig"] is not None):
+                ratio = motion_ratio_in_polygon(fgmask, data["poly_orig"])
                 if ratio >= MOTION_RATIO_HIT:
                     data["last_occluded_ms"] = t_ms
 
@@ -252,23 +324,23 @@ while running:
             del castores[cid]
             despawned_this_frame = True
 
-    # 2) Puntos por tapado rápido:
+    # 2) Puntos por tapado: desaparición + oclusión reciente
     for cid, data in list(castores.items()):
         if cid not in current_ids:
             last_occ = data.get("last_occluded_ms", -10**9)
             last_seen = data.get("last_seen_ms", -10**9)
             if (t_ms - last_occ) <= OCC_WINDOW_MS and (t_ms - last_seen) <= OCC_WINDOW_MS:
-                ratio_now = motion_ratio_in_polygon(fgmask, data.get("poly", None)) if OCLUSION_ACTIVA else 0.0
+                # chequeo rápido adicional usando el último poly_orig
+                ratio_now = motion_ratio_in_polygon(fgmask, data.get("poly_orig", None)) if OCLUSION_ACTIVA else 0.0
                 if ratio_now >= (MOTION_RATIO_HIT * 0.7) or (t_ms - last_occ) <= 200:
                     puntos += 1
             del castores[cid]
             despawned_this_frame = True
 
-    # 3) Crear sólo si no hay activo y no acaba de despawnear
+    # 3) Crear solo si no hay activo y no acaba de despawnear
     crear_nuevo = (len(castores) == 0) and (not despawned_this_frame)
     if crear_nuevo and (t_ms - last_create_ms) < INTERVALO_CREACION_MS:
         crear_nuevo = False
-
     if crear_nuevo:
         candidates = [m for m in marcadores_info.keys() if m in visible_stable]
         if candidates:
@@ -281,35 +353,33 @@ while running:
                 "color": color,
                 "last_seen_ms": t_ms,
                 "last_occluded_ms": -10**9,
-                "poly": polys_by_id.get(mid, None)
+                "poly": polys_disp.get(mid, None),       # para UI si lo quieres
+                "poly_orig": polys_orig.get(mid, None)   # para oclusión/movimiento
             }
             last_create_ms = t_ms
 
-    # --- DIBUJO ---
+    # --- 7) DIBUJO (usa frame_display) ---
     ventana.fill((0,0,0))
-    ventana.blit(pantalla_from_frame(frame), (0,0))
+    ventana.blit(pantalla_from_frame(frame_display), (0,0))
 
-    # Dibujar castor
+    # Castor(es) sobre el video
     for mid, info in castores.items():
-        x, y = info["pos"]
-        surf = castor_verde if info["color"] == "verde" else castor_morado
-        ventana.blit(surf, (x - surf.get_width()//2, y - surf.get_height()//2))
+       x, y = info["pos"]
+       surf = castor_verde if info["color"] == "verde" else castor_morado
+       ventana.blit(surf, (x - surf.get_width()//2, y - surf.get_height()//2))
 
+    # HUD: puntos + cronómetro + vidas (al final)
     ventana.blit(fuente.render(f"Puntos: {puntos}", True, (0,255,0)), (20,20))
-    dibujar_vidas(ventana, vidas)
 
     if castores:
         cid, data = next(iter(castores.items()))
         remain_ms = max(0, TIEMPO_CASTOR_MS - (t_ms - data["spawn_ms"]))
         remain_sec = (remain_ms + 999) // 1000
-        if remain_sec <= 1:
-            timer_color = (255, 60, 60)
-        elif remain_sec <= 2:
-            timer_color = (255, 165, 0)
-        else:
-            timer_color = (255, 255, 255)
+        timer_color = (255,255,255) if remain_sec > 2 else ((255,165,0) if remain_sec > 1 else (255,60,60))
         cron = fuente_timer.render(f"{remain_sec}s", True, timer_color)
         ventana.blit(cron, (ANCHO//2 - cron.get_width()//2, 8))
+
+    dibujar_vidas(ventana, vidas)
 
     if vidas <= 0:
         go = fuente.render("GAME OVER", True, (255,0,0))
