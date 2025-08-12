@@ -6,6 +6,31 @@ import numpy as np
 import sys
 import os
 
+# --- RUTAS PORTABLES ---
+def resource_path(rel):
+    if hasattr(sys, "_MEIPASS"):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, rel)
+
+HIGHSCORE_PATH = resource_path("highscore.txt")
+
+def load_highscore():
+    try:
+        with open(HIGHSCORE_PATH, "r", encoding="utf-8") as f:
+            return int((f.read().strip() or "0"))
+    except Exception:
+        return 0
+
+def save_highscore(n):
+    try:
+        with open(HIGHSCORE_PATH, "w", encoding="utf-8") as f:
+            f.write(str(int(n)))
+    except Exception:
+        pass
+
+
 # ------------------------
 # CONFIG
 # ------------------------
@@ -41,14 +66,7 @@ pygame.display.set_caption("Golpea al Castor - ArUco Edition (rápido + timer ro
 fuente = pygame.font.Font(None, 48)
 fuente_timer = pygame.font.Font(None, 64)
 clock = pygame.time.Clock()
-
-# --- RUTAS PORTABLES ---
-def resource_path(rel):
-    if hasattr(sys, "_MEIPASS"):
-        base = sys._MEIPASS
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, rel)
+start_time_ms = pygame.time.get_ticks()   # cronómetro de la partida
 
 # Audio (después de init)
 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
@@ -135,15 +153,25 @@ except pygame.error as e:
 # ------------------------
 # OPENCV / ARUCO
 # ------------------------
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    # Fuerza 1280x720 @30fps (mejor detalle para ArUco)
- cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
- cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
- cap.set(cv2.CAP_PROP_FPS,          30)
+def abrir_camara(idx=0, w=1280, h=720):
+    for backend in (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY):
+        cap = cv2.VideoCapture(idx, backend)
+        if cap.isOpened():
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH,  w)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+            cap.set(cv2.CAP_PROP_FPS,          30)
+            # Warm-up ~0.8 s
+            t0 = pygame.time.get_ticks()
+            while pygame.time.get_ticks() - t0 < 800:
+                pygame.event.pump()
+                cap.read()
+                pygame.time.delay(30)
+            return cap
+    return None
 
-if not cap.isOpened():
-    raise RuntimeError("No se pudo abrir la webcam. Revisa dispositivo/camara.")
+cap = abrir_camara(0, 1280, 720)
+if cap is None or not cap.isOpened():
+    raise RuntimeError("No se pudo abrir la webcam. Cierra otras apps que usen cámara e intenta de nuevo.")
 
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 try:
@@ -254,6 +282,45 @@ last_create_ms = pygame.time.get_ticks()
 vis_count = {}         # id -> frames consecutivos visible
 polys_by_id = {}       # id -> polígono 4x2 (coords frame)
 
+def game_over_screen(score, elapsed_s, highscore):
+    overlay = pygame.Surface((ANCHO, ALTO))
+    overlay.set_alpha(200)
+    overlay.fill((0, 0, 0))
+
+    big   = pygame.font.Font(None, 84)
+    small = pygame.font.Font(None, 40)
+
+    while True:
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                return "quit"
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_ESCAPE:
+                    return "quit"
+                if ev.key == pygame.K_RETURN:
+                    return "restart"
+
+        # Dibujo
+        ventana.blit(overlay, (0, 0))
+        t1 = big.render("GAME OVER", True, (255, 60, 60))
+        t2 = small.render(f"Puntaje: {score}", True, (255, 255, 255))
+        t3 = small.render(f"Tiempo: {elapsed_s}s", True, (255, 255, 255))
+        t4 = small.render(f"Récord: {highscore}", True, (255, 215, 0))
+        t5 = small.render("ENTER = jugar de nuevo", True, (200, 200, 200))
+        t6 = small.render("ESC = salir", True, (200, 200, 200))
+
+        cx = ANCHO // 2
+        ventana.blit(t1, (cx - t1.get_width() // 2, ALTO // 2 - 120))
+        ventana.blit(t2, (cx - t2.get_width() // 2, ALTO // 2 - 40))
+        ventana.blit(t3, (cx - t3.get_width() // 2, ALTO // 2 + 10))
+        ventana.blit(t4, (cx - t4.get_width() // 2, ALTO // 2 + 60))
+        ventana.blit(t5, (cx - t5.get_width() // 2, ALTO // 2 + 120))
+        ventana.blit(t6, (cx - t6.get_width() // 2, ALTO // 2 + 160))
+
+        pygame.display.flip()
+        pygame.time.delay(16)  # ~60 FPS
+        
+
 # ------------------------
 # ------------------------
 # BUCLE PRINCIPAL (REEMPLAZAR TODO ESTE BLOQUE)
@@ -261,6 +328,25 @@ polys_by_id = {}       # id -> polígono 4x2 (coords frame)
 running = True
 while running:
     ret, frame = cap.read()
+   
+    if not ret or frame is None:
+        ventana.fill((0,0,0))
+        msg = fuente.render("Reconectando cámara...", True, (255,255,255))
+        ventana.blit(msg, (ANCHO//2 - msg.get_width()//2, ALTO//2 - msg.get_height()//2))
+        pygame.display.flip()
+        pygame.event.pump()
+        pygame.time.delay(500)  # medio segundo de espera
+        
+        # Intentar reabrir cámara
+        cap.release()
+        cap = abrir_camara(0, 1280, 720)  # reutiliza la función del punto B
+        
+        if cap is None or not cap.isOpened():
+            continue  # si no logra abrir, vuelve a intentar
+        else:
+            # Si se reabrió correctamente, sigue con el bucle
+            continue
+
     if not ret:
         print("Error leyendo la cámara")
         break
@@ -405,20 +491,39 @@ while running:
 
     dibujar_vidas(ventana, vidas)
 
-    if vidas <= 0:
-        go = fuente.render("GAME OVER", True, (255,0,0))
-        ventana.blit(go, (ANCHO//2 - go.get_width()//2, ALTO//2 - go.get_height()//2))
-        pygame.display.flip()
-        time.sleep(2)
-        break
-
-    pygame.display.flip()
-
+    pygame.display.flip()      # <- ¡imprescindible!
     for ev in pygame.event.get():
-        if ev.type == pygame.QUIT:
-            running = False
-
+      if ev.type == pygame.QUIT:
+        running = False
+      elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
+        running = False
     clock.tick(30)
+
+    if vidas <= 0:
+    # 1) tiempo jugado
+     elapsed_s = (pygame.time.get_ticks() - start_time_ms) // 1000
+
+    # 2) récord
+     hs = load_highscore()
+     if puntos > hs:
+        save_highscore(puntos)
+        hs = puntos
+
+    # 3) mostrar pantalla y esperar acción
+     action = game_over_screen(puntos, elapsed_s, hs)
+
+    # 4) manejar acción
+     if action == "restart":
+        puntos = 0
+        vidas  = VIDAS_MAX
+        castores.clear()
+        vis_count.clear()
+        last_create_ms = pygame.time.get_ticks()
+        start_time_ms  = pygame.time.get_ticks()  # reinicia cronómetro
+        continue
+     else:  # "quit"
+        running = False
+        break
 
 cap.release()
 pygame.quit()
