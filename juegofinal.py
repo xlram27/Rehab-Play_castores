@@ -64,6 +64,89 @@ fuente_timer = pygame.font.Font(None, 64)
 clock = pygame.time.Clock()
 start_time_ms = pygame.time.get_ticks()
 
+def start_screen():
+    title_font = pygame.font.Font(None, 96)
+    h1 = title_font.render("Pisa al castor", True, (255, 255, 255))
+    h2 = fuente.render("Indicaciones:", True, (200, 200, 200))
+    l1 = fuente.render("• Cuando apareza un castor morado usa tu pie izquierdo", True, (180, 150, 255))
+    l2 = fuente.render("• Cuando aparezca un castor Verde  usa tu pie derecho",  True, (150, 255, 150))
+    l3 = fuente.render("• Evita realizar movimientos bruscos o muy rápidos.", True, (255, 220, 150))
+    press = fuente.render("Presiona ENTER para continuar", True, (220, 220, 220))
+
+    blink = 0
+    while True:
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if ev.type == pygame.KEYDOWN:
+                if ev.key == pygame.K_RETURN:
+                    return
+                if ev.key == pygame.K_ESCAPE:
+                    pygame.quit(); sys.exit()
+
+        ventana.fill((10, 10, 10))
+
+        cx = ANCHO // 2
+        ventana.blit(h1, (cx - h1.get_width() // 2, 120))
+        ventana.blit(h2, (cx - h2.get_width() // 2, 240))
+        ventana.blit(l1, (cx - l1.get_width() // 2, 300))
+        ventana.blit(l2, (cx - l2.get_width() // 2, 350))
+        ventana.blit(l3, (cx - l3.get_width() // 2, 420))
+
+        # Parpadeo suave del “Enter…”
+        if (blink // 30) % 2 == 0:
+            ventana.blit(press, (cx - press.get_width() // 2, 520))
+        blink += 1
+
+        pygame.display.flip()
+        clock.tick(60)
+
+start_screen()
+
+def select_time_screen(min_s=7, max_s=12, default_s=9):
+    """Pantalla para elegir el tiempo de vida del castor en segundos."""
+    t = default_s
+    title_font = pygame.font.Font(None, 72)
+    hint_font  = pygame.font.Font(None, 36)
+
+    while True:
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if ev.type == pygame.KEYDOWN:
+                if ev.key in (pygame.K_ESCAPE,):
+                    pygame.quit(); sys.exit()
+                if ev.key in (pygame.K_LEFT, pygame.K_a):
+                    t = max(min_s, t - 1)
+                if ev.key in (pygame.K_RIGHT, pygame.K_d):
+                    t = min(max_s, t + 1)
+                if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    return t
+
+        ventana.fill((0,0,0))
+        title = title_font.render("Elige el tiempo por castor", True, (255,255,255))
+        rango = hint_font.render(f"Rango permitido: {min_s} - {max_s} s", True, (200,200,200))
+        val   = fuente_timer.render(f"{t} s", True, (120,255,120))
+        instr = hint_font.render("← / → (A/D) para cambiar · ENTER para continuar", True, (220,220,220))
+
+        cx = ANCHO//2
+        ventana.blit(title, (cx - title.get_width()//2, 160))
+        ventana.blit(rango, (cx - rango.get_width()//2, 230))
+        ventana.blit(val,   (cx - val.get_width()//2,   300))
+        ventana.blit(instr, (cx - instr.get_width()//2, 380))
+
+        # dibuja flechas simples
+        pygame.draw.polygon(ventana, (200,200,200),
+                            [(cx-140,300), (cx-110,285), (cx-110,315)])   # flecha izq
+        pygame.draw.polygon(ventana, (200,200,200),
+                            [(cx+140,300), (cx+110,285), (cx+110,315)])   # flecha der
+
+        pygame.display.flip()
+        pygame.time.delay(16)
+
+tiempo_sel_s = select_time_screen(7, 12, 9)  # valor en segundos
+TIEMPO_CASTOR_MS = tiempo_sel_s * 1000       # convertir a milisegundos
+
 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
 pygame.mixer.music.set_volume(1.0)
 SND_PERDIDA = resource_path(os.path.join("ARCHIVOS", "path_sonido.mp3"))
